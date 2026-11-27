@@ -1,0 +1,60 @@
+name: Release
+
+# Pushing a tag v<version> publishes a GitHub Release: the server and the runner as zips, each with
+# its SHA256 file, and the notes taken from that version's section of CHANGELOG.md.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish the release
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # First, because it is the cheapest way to fail: the tag must be v<project version>, and
+      # CHANGELOG.md must have a section for that version with something in it.
+      - name: Release notes from CHANGELOG.md
+        shell: pwsh
+        run: ./build/release-notes.ps1 -Tag $env:GITHUB_REF_NAME -Out artifacts/notes.md
+
+      - name: Build
+        run: dotnet build
+
+      - name: Unit tests
+        run: dotnet test --no-build
+
+      - name: Smoke test
+        shell: pwsh
+        run: ./tests/smoke.ps1
+
+      - name: Package
+        shell: pwsh
+        run: ./build/package.ps1 -Out artifacts
+
+      - name: Create the GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $files = @(Get-ChildItem artifacts -File | Where-Object { $_.Name -like 'rtfx-*' } | ForEach-Object { $_.FullName })
+          if ($files.Count -ne 4) { throw "expected two zips and two .sha256 files, found $($files.Count)" }
+          $options = @('--repo', $env:GITHUB_REPOSITORY, '--title', "rtfx $($tag.Substring(1))", '--notes-file', 'artifacts/notes.md', '--verify-tag')
+          if ($tag -like '*-*') { $options += '--prerelease' }
+          gh release create $tag @files @options
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }

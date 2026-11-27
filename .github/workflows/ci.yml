@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      # Warnings are errors (Directory.Build.props), so a warning fails here.
+      - name: Build
+        run: dotnet build --no-restore
+
+      - name: Unit tests
+        run: dotnet test --no-build
+
+      # The runner, the client scripts and the MCP server together, against a stand-in for Copilot.
+      - name: Smoke test
+        shell: pwsh
+        run: ./tests/smoke.ps1
+
+      # What a release would need: one version in the server and the runner, notes for it in
+      # CHANGELOG.md, and packages that build. Found here, not on the day of the tag.
+      - name: Release notes for the current version
+        shell: pwsh
+        run: ./build/release-notes.ps1
+
+      - name: Package
+        shell: pwsh
+        run: ./build/package.ps1

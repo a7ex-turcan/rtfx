@@ -1,0 +1,22 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <Authors>Alex Turcan</Authors>
+    <RepositoryUrl>https://github.com/a7ex-turcan/rtfx</RepositoryUrl>
+  </PropertyGroup>
+
+  <!--
+    Product code runs the trim and AOT analyzers from day one, as in rtfc and rtfq: with
+    TreatWarningsAsErrors, a reflection-heavy dependency fails the build the day it is added.
+    Test projects need not be AOT-clean.
+  -->
+  <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests'))">
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+</Project>
